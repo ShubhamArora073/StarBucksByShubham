@@ -92,8 +92,8 @@ This project provides a complete DevSecOps implementation including:
 
 | Service | Username | Password |
 |---------|----------|----------|
-| **Grafana** | admin | StarbucksAdmin2024! |
-| **SonarQube** | admin | admin (change on first login) |
+| **Grafana** | admin | S |
+| **SonarQube** | admin |  (change on first login) |
 | **Jenkins** | admin | Run: `kubectl exec -n devops jenkins-0 -- cat /var/jenkins_home/secrets/initialAdminPassword` |
 
 ---
