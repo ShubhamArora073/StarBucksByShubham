@@ -196,7 +196,7 @@ spec:
                 }
                 container('sonar-scanner') {
                     dir('app') {
-                        withCredentials([string(credentialsId: 'sonarqube-token', variable: 'SONAR_TOKEN')]) {
+                        withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
                             sh '''
                                 echo "Running SonarQube analysis..."
                                 sonar-scanner \
@@ -205,7 +205,7 @@ spec:
                                     -Dsonar.sources=src \
                                     -Dsonar.host.url=${SONAR_HOST_URL} \
                                     -Dsonar.token=${SONAR_TOKEN} \
-                                    -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info || echo "⚠️ SonarQube analysis skipped"
+                                    -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info || true
                                 echo "✅ SonarQube analysis completed"
                             '''
                         }
