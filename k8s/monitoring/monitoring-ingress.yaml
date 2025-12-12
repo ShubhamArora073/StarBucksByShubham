@@ -1,0 +1,98 @@
+################################################################################
+# Monitoring Stack Ingress Configuration
+# ALB Ingress for Grafana (3000) and Prometheus (9090)
+################################################################################
+---
+# Grafana Ingress - Port 3000
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: grafana-ingress
+  namespace: monitoring
+  annotations:
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 3000}]'
+    alb.ingress.kubernetes.io/healthcheck-path: /api/health
+    alb.ingress.kubernetes.io/healthcheck-port: "3000"
+    alb.ingress.kubernetes.io/success-codes: '200'
+    # Use same ALB group as monitoring
+    alb.ingress.kubernetes.io/group.name: starbucks-monitoring
+    alb.ingress.kubernetes.io/group.order: '10'
+    alb.ingress.kubernetes.io/tags: Environment=dev,Purpose=monitoring
+spec:
+  ingressClassName: alb
+  rules:
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: prometheus-grafana
+                port:
+                  number: 80
+---
+# Prometheus Ingress - Port 9090
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: prometheus-ingress
+  namespace: monitoring
+  annotations:
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 9090}]'
+    alb.ingress.kubernetes.io/healthcheck-path: /-/healthy
+    alb.ingress.kubernetes.io/healthcheck-port: "9090"
+    alb.ingress.kubernetes.io/success-codes: '200'
+    # Use same ALB group as monitoring
+    alb.ingress.kubernetes.io/group.name: starbucks-monitoring
+    alb.ingress.kubernetes.io/group.order: '20'
+    alb.ingress.kubernetes.io/tags: Environment=dev,Purpose=monitoring
+spec:
+  ingressClassName: alb
+  rules:
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: prometheus-prometheus
+                port:
+                  number: 9090
+---
+# AlertManager Ingress - Port 9093
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: alertmanager-ingress
+  namespace: monitoring
+  annotations:
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 9093}]'
+    alb.ingress.kubernetes.io/healthcheck-path: /-/healthy
+    alb.ingress.kubernetes.io/healthcheck-port: "9093"
+    alb.ingress.kubernetes.io/success-codes: '200'
+    # Use same ALB group as monitoring
+    alb.ingress.kubernetes.io/group.name: starbucks-monitoring
+    alb.ingress.kubernetes.io/group.order: '30'
+    alb.ingress.kubernetes.io/tags: Environment=dev,Purpose=monitoring
+spec:
+  ingressClassName: alb
+  rules:
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: prometheus-alertmanager
+                port:
+                  number: 9093
+

@@ -1,0 +1,22 @@
+# =============================================================================
+# Pod Disruption Budget for Starbucks Application
+# Ensures high availability during voluntary disruptions
+# =============================================================================
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: starbucks-pdb
+  namespace: starbucks
+  labels:
+    app: starbucks
+spec:
+  # Minimum available pods during disruptions
+  minAvailable: 1
+  
+  # Alternative: Maximum unavailable pods
+  # maxUnavailable: 1
+  
+  selector:
+    matchLabels:
+      app: starbucks
+

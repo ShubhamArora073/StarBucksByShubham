@@ -1,0 +1,59 @@
+# Dependencies
+node_modules/
+app/node_modules/
+
+# Build output
+app/build/
+build/
+dist/
+
+# Test coverage
+coverage/
+app/coverage/
+
+# Environment files
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Terraform
+terraform/.terraform/
+terraform/*.tfstate
+terraform/*.tfstate.backup
+terraform/.terraform.lock.hcl
+terraform/tfplan*
+terraform/*.tfplan
+
+# Secrets (don't commit real secrets!)
+*.pem
+*.key
+*secrets*.yaml
+!k8s/devops/jenkins/secrets.yaml
+
+# Docker
+docker/node_modules/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+

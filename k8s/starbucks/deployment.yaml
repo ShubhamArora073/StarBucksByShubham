@@ -1,0 +1,179 @@
+# =============================================================================
+# Starbucks Application Deployment
+# Production-grade Kubernetes Deployment with best practices
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: starbucks-app
+  namespace: starbucks
+  labels:
+    app: starbucks
+    version: v1
+    tier: frontend
+    environment: production
+  annotations:
+    kubernetes.io/change-cause: "Initial deployment"
+spec:
+  replicas: 2
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: starbucks
+      version: v1
+  template:
+    metadata:
+      labels:
+        app: starbucks
+        version: v1
+        tier: frontend
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      # Service Account
+      serviceAccountName: starbucks-app
+      
+      # Security Context for Pod
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      
+      # Pod Anti-Affinity - spread across nodes
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: starbucks
+                topologyKey: kubernetes.io/hostname
+        # Prefer application nodes
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: node-type
+                    operator: In
+                    values:
+                      - application
+      
+      # Topology Spread Constraints
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: starbucks
+      
+      containers:
+        - name: starbucks
+          image: 245279657609.dkr.ecr.ap-south-1.amazonaws.com/starbucks:latest
+          imagePullPolicy: Always
+          
+          # Container Security Context
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL
+          
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          
+          # Environment Variables
+          env:
+            - name: NODE_ENV
+              value: "production"
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+          
+          # Resource Limits
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          
+          # Liveness Probe
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+            successThreshold: 1
+          
+          # Readiness Probe
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+            successThreshold: 1
+          
+          # Startup Probe (for slow starting containers)
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 0
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 30
+      
+      # Termination Grace Period
+      terminationGracePeriodSeconds: 30
+      
+      # DNS Policy
+      dnsPolicy: ClusterFirst
+      
+      # Restart Policy
+      restartPolicy: Always
+
+---
+# =============================================================================
+# Service Account for Starbucks Application
+# =============================================================================
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: starbucks-app
+  namespace: starbucks
+  labels:
+    app: starbucks
+automountServiceAccountToken: false
+

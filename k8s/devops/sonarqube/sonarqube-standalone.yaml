@@ -1,0 +1,250 @@
+################################################################################
+# SonarQube Standalone Deployment (Alternative to Helm)
+# Use this if you prefer raw manifests over Helm
+################################################################################
+---
+# PostgreSQL Secret
+apiVersion: v1
+kind: Secret
+metadata:
+  name: sonarqube-postgresql
+  namespace: devops
+type: Opaque
+stringData:
+  postgresql-password: "sonarqube123"
+  postgresql-postgres-password: "postgres123"
+---
+# PostgreSQL PVC
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: sonarqube-postgresql-pvc
+  namespace: devops
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: gp3
+  resources:
+    requests:
+      storage: 10Gi
+---
+# PostgreSQL Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sonarqube-postgresql
+  namespace: devops
+  labels:
+    app: sonarqube-postgresql
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sonarqube-postgresql
+  template:
+    metadata:
+      labels:
+        app: sonarqube-postgresql
+    spec:
+      nodeSelector:
+        workload: devops
+      containers:
+        - name: postgresql
+          image: postgres:15-alpine
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              value: "sonarqube"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: sonarqube-postgresql
+                  key: postgresql-password
+            - name: POSTGRES_DB
+              value: "sonarqube"
+            - name: PGDATA
+              value: "/var/lib/postgresql/data/pgdata"
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - sonarqube
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - sonarqube
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: sonarqube-postgresql-pvc
+---
+# PostgreSQL Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: sonarqube-postgresql
+  namespace: devops
+spec:
+  selector:
+    app: sonarqube-postgresql
+  ports:
+    - port: 5432
+      targetPort: 5432
+  type: ClusterIP
+---
+# SonarQube PVC
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: sonarqube-data-pvc
+  namespace: devops
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: gp3
+  resources:
+    requests:
+      storage: 20Gi
+---
+# SonarQube Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sonarqube
+  namespace: devops
+  labels:
+    app: sonarqube
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sonarqube
+  template:
+    metadata:
+      labels:
+        app: sonarqube
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9000"
+    spec:
+      nodeSelector:
+        workload: devops
+      securityContext:
+        fsGroup: 1000
+      initContainers:
+        # Init container to set sysctl parameters
+        - name: init-sysctl
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              sysctl -w vm.max_map_count=524288
+              sysctl -w fs.file-max=131072
+          securityContext:
+            privileged: true
+        # Wait for PostgreSQL
+        - name: wait-for-postgresql
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z sonarqube-postgresql 5432; do
+                echo "Waiting for PostgreSQL..."
+                sleep 2
+              done
+              echo "PostgreSQL is ready!"
+      containers:
+        - name: sonarqube
+          image: sonarqube:10.6-community
+          ports:
+            - containerPort: 9000
+          env:
+            - name: SONAR_JDBC_URL
+              value: "jdbc:postgresql://sonarqube-postgresql:5432/sonarqube"
+            - name: SONAR_JDBC_USERNAME
+              value: "sonarqube"
+            - name: SONAR_JDBC_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: sonarqube-postgresql
+                  key: postgresql-password
+            - name: SONAR_WEB_JAVAOPTS
+              value: "-Xmx1g -Xms512m"
+            - name: SONAR_CE_JAVAOPTS
+              value: "-Xmx1g -Xms512m"
+            - name: SONAR_SEARCH_JAVAOPTS
+              value: "-Xmx512m -Xms512m"
+          resources:
+            requests:
+              cpu: "400m"
+              memory: "2Gi"
+            limits:
+              cpu: "2000m"
+              memory: "4Gi"
+          volumeMounts:
+            - name: data
+              mountPath: /opt/sonarqube/data
+            - name: extensions
+              mountPath: /opt/sonarqube/extensions
+            - name: logs
+              mountPath: /opt/sonarqube/logs
+          livenessProbe:
+            httpGet:
+              path: /api/system/status
+              port: 9000
+            initialDelaySeconds: 120
+            periodSeconds: 30
+            timeoutSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /api/system/status
+              port: 9000
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 10
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: sonarqube-data-pvc
+        - name: extensions
+          emptyDir: {}
+        - name: logs
+          emptyDir: {}
+---
+# SonarQube Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: sonarqube
+  namespace: devops
+  labels:
+    app: sonarqube
+spec:
+  selector:
+    app: sonarqube
+  ports:
+    - port: 9000
+      targetPort: 9000
+      name: http
+  type: ClusterIP
+# Note: Ingress is defined in separate file (sonarqube-ingress.yaml)

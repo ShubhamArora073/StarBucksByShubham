@@ -1,0 +1,25 @@
+################################################################################
+# Starbucks App ServiceMonitor
+# Scrapes metrics from Starbucks application
+################################################################################
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: starbucks-app
+  namespace: monitoring
+  labels:
+    app: starbucks
+    release: prometheus
+spec:
+  namespaceSelector:
+    matchNames:
+      - starbucks
+  selector:
+    matchLabels:
+      app: starbucks
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s
+

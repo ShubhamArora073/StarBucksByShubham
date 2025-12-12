@@ -1,0 +1,63 @@
+# Dependencies
+app/node_modules
+**/node_modules
+
+# Build output (we generate this inside container)
+app/build
+**/build
+
+# Test files
+app/coverage
+**/coverage
+**/*.test.js
+**/*.spec.js
+
+# Development files
+**/.env
+**/.env.local
+**/.env.development
+**/.env.test
+
+# IDE and editor files
+**/.idea
+**/.vscode
+**/*.swp
+**/*.swo
+*~
+
+# Git
+.git
+.gitignore
+
+# Documentation
+*.md
+!README.md
+docs/
+
+# CI/CD files (not needed in image)
+ci-cd/
+Jenkinsfile
+.github/
+
+# Terraform (definitely not needed in image)
+terraform/
+
+# Kubernetes manifests (not needed in image)
+k8s/
+
+# Scripts (not needed in image)
+scripts/
+
+# Logs
+**/*.log
+**/npm-debug.log*
+
+# OS files
+**/.DS_Store
+**/Thumbs.db
+
+# Docker files
+**/Dockerfile*
+**/.docker*
+!docker/nginx.conf
+

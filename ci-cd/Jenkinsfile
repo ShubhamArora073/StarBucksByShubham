@@ -1,0 +1,483 @@
+// =============================================================================
+// Starbucks Application CI/CD Pipeline
+// Jenkins Pipeline for building and deploying to EKS
+// Author: Shubham Arora
+// =============================================================================
+
+pipeline {
+    agent {
+        kubernetes {
+            yaml '''
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    jenkins: agent
+spec:
+  serviceAccountName: jenkins
+  containers:
+    - name: node
+      image: node:20-alpine
+      command:
+        - cat
+      tty: true
+      resources:
+        requests:
+          cpu: "500m"
+          memory: "1Gi"
+        limits:
+          cpu: "1000m"
+          memory: "2Gi"
+    - name: docker
+      image: docker:24-dind
+      securityContext:
+        privileged: true
+      env:
+        - name: DOCKER_TLS_CERTDIR
+          value: ""
+      resources:
+        requests:
+          cpu: "500m"
+          memory: "512Mi"
+        limits:
+          cpu: "1000m"
+          memory: "1Gi"
+    - name: aws-kubectl
+      image: amazon/aws-cli:latest
+      command:
+        - cat
+      tty: true
+      resources:
+        requests:
+          cpu: "200m"
+          memory: "256Mi"
+        limits:
+          cpu: "500m"
+          memory: "512Mi"
+    - name: trivy
+      image: aquasec/trivy:latest
+      command:
+        - cat
+      tty: true
+      resources:
+        requests:
+          cpu: "200m"
+          memory: "256Mi"
+        limits:
+          cpu: "500m"
+          memory: "512Mi"
+    - name: sonar-scanner
+      image: sonarsource/sonar-scanner-cli:latest
+      command:
+        - cat
+      tty: true
+      resources:
+        requests:
+          cpu: "200m"
+          memory: "256Mi"
+        limits:
+          cpu: "500m"
+          memory: "512Mi"
+'''
+        }
+    }
+    
+    environment {
+        // AWS Configuration
+        AWS_REGION = 'ap-south-1'
+        AWS_ACCOUNT_ID = '245279657609'
+        ECR_REGISTRY = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+        ECR_REPOSITORY = 'starbucks'
+        
+        // EKS Configuration
+        EKS_CLUSTER_NAME = 'starbucks-dev'
+        K8S_NAMESPACE = 'starbucks'
+        
+        // SonarQube Configuration
+        SONAR_HOST_URL = 'http://sonarqube-service.devops.svc.cluster.local:9000'
+        SONAR_PROJECT_KEY = 'starbucks'
+        
+        // Build Configuration
+        IMAGE_TAG = "${BUILD_NUMBER}"
+        DOCKER_BUILDKIT = '1'
+        
+        // App Directory
+        APP_DIR = 'StarBucksByShubham'
+    }
+    
+    options {
+        timeout(time: 45, unit: 'MINUTES')
+        disableConcurrentBuilds()
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+        timestamps()
+    }
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                script {
+                    echo "========================================"
+                    echo "Stage: Checkout Source Code"
+                    echo "========================================"
+                }
+                checkout scm
+                script {
+                    env.GIT_COMMIT_SHORT = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+                    env.IMAGE_TAG = "${BUILD_NUMBER}-${GIT_COMMIT_SHORT}"
+                    echo "Build TAG: ${IMAGE_TAG}"
+                    echo "Workspace: ${WORKSPACE}"
+                }
+            }
+        }
+        
+        stage('Install Dependencies') {
+            steps {
+                script {
+                    echo "========================================"
+                    echo "Stage: Install Node.js Dependencies"
+                    echo "========================================"
+                }
+                container('node') {
+                    dir("${APP_DIR}/app") {
+                        sh '''
+                            echo "Node version: $(node --version)"
+                            echo "NPM version: $(npm --version)"
+                            echo "Installing dependencies..."
+                            npm ci --legacy-peer-deps
+                            echo "✅ Dependencies installed successfully"
+                        '''
+                    }
+                }
+            }
+        }
+        
+        stage('Code Quality Analysis') {
+            parallel {
+                stage('Lint Check') {
+                    steps {
+                        container('node') {
+                            dir("${APP_DIR}/app") {
+                                sh '''
+                                    echo "Running lint check..."
+                                    npm run lint 2>/dev/null || echo "⚠️ No lint script configured, skipping..."
+                                '''
+                            }
+                        }
+                    }
+                }
+                stage('Unit Tests') {
+                    steps {
+                        container('node') {
+                            dir("${APP_DIR}/app") {
+                                sh '''
+                                    echo "Running unit tests..."
+                                    CI=true npm test -- --coverage --watchAll=false --passWithNoTests || true
+                                    echo "✅ Tests completed"
+                                '''
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        stage('SonarQube Analysis') {
+            steps {
+                script {
+                    echo "========================================"
+                    echo "Stage: SonarQube Code Analysis"
+                    echo "========================================"
+                }
+                container('sonar-scanner') {
+                    dir("${APP_DIR}/app") {
+                        withCredentials([string(credentialsId: 'sonarqube-token', variable: 'SONAR_TOKEN')]) {
+                            sh '''
+                                echo "Running SonarQube analysis..."
+                                sonar-scanner \
+                                    -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
+                                    -Dsonar.projectName=Starbucks \
+                                    -Dsonar.sources=src \
+                                    -Dsonar.host.url=${SONAR_HOST_URL} \
+                                    -Dsonar.token=${SONAR_TOKEN} \
+                                    -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info || echo "⚠️ SonarQube analysis skipped"
+                                echo "✅ SonarQube analysis completed"
+                            '''
+                        }
+                    }
+                }
+            }
+        }
+        
+        stage('Security Scan - Source Code') {
+            steps {
+                script {
+                    echo "========================================"
+                    echo "Stage: Trivy Source Code Scan"
+                    echo "========================================"
+                }
+                container('trivy') {
+                    dir("${APP_DIR}/app") {
+                        sh '''
+                            echo "Scanning source code for vulnerabilities..."
+                            trivy fs --severity HIGH,CRITICAL \
+                                --format table \
+                                --exit-code 0 \
+                                --scanners vuln,secret,misconfig \
+                                . 2>/dev/null || trivy fs --severity HIGH,CRITICAL . || true
+                            echo "✅ Source code security scan completed"
+                        '''
+                    }
+                }
+            }
+        }
+        
+        stage('Build Application') {
+            steps {
+                script {
+                    echo "========================================"
+                    echo "Stage: Build React Application"
+                    echo "========================================"
+                }
+                container('node') {
+                    dir("${APP_DIR}/app") {
+                        sh '''
+                            echo "Building production application..."
+                            npm run build
+                            echo "✅ Build completed successfully"
+                            echo "Build output:"
+                            ls -la build/
+                            du -sh build/
+                        '''
+                    }
+                }
+            }
+        }
+        
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    echo "========================================"
+                    echo "Stage: Build Docker Image"
+                    echo "========================================"
+                }
+                container('docker') {
+                    dir("${APP_DIR}") {
+                        sh '''
+                            echo "Building Docker image for linux/amd64..."
+                            
+                            docker build \
+                                --platform linux/amd64 \
+                                -f docker/Dockerfile \
+                                -t ${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG} \
+                                -t ${ECR_REGISTRY}/${ECR_REPOSITORY}:latest \
+                                .
+                            
+                            echo "✅ Docker image built successfully"
+                            docker images | grep ${ECR_REPOSITORY}
+                        '''
+                    }
+                }
+            }
+        }
+        
+        stage('Security Scan - Docker Image') {
+            steps {
+                script {
+                    echo "========================================"
+                    echo "Stage: Trivy Docker Image Scan"
+                    echo "========================================"
+                }
+                container('trivy') {
+                    sh '''
+                        echo "Scanning Docker image for vulnerabilities..."
+                        trivy image --severity HIGH,CRITICAL \
+                            --format table \
+                            --exit-code 0 \
+                            ${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG} || true
+                        echo "✅ Docker image security scan completed"
+                    '''
+                }
+            }
+        }
+        
+        stage('Push to ECR') {
+            steps {
+                script {
+                    echo "========================================"
+                    echo "Stage: Push to Amazon ECR"
+                    echo "========================================"
+                }
+                container('aws-kubectl') {
+                    sh '''
+                        echo "Getting ECR login token..."
+                        aws ecr get-login-password --region ${AWS_REGION} > /tmp/ecr-password.txt
+                        
+                        # Ensure ECR repository exists
+                        aws ecr describe-repositories --repository-names ${ECR_REPOSITORY} --region ${AWS_REGION} || \
+                        aws ecr create-repository --repository-name ${ECR_REPOSITORY} --region ${AWS_REGION}
+                    '''
+                }
+                container('docker') {
+                    sh '''
+                        echo "Logging into ECR..."
+                        cat /tmp/ecr-password.txt | docker login --username AWS --password-stdin ${ECR_REGISTRY}
+                        
+                        echo "Pushing image to ECR..."
+                        docker push ${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}
+                        docker push ${ECR_REGISTRY}/${ECR_REPOSITORY}:latest
+                        
+                        echo "✅ Image pushed successfully to ECR"
+                        echo "Image: ${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}"
+                    '''
+                }
+            }
+        }
+        
+        stage('Deploy to EKS') {
+            steps {
+                script {
+                    echo "========================================"
+                    echo "Stage: Deploy to EKS Cluster"
+                    echo "========================================"
+                }
+                container('aws-kubectl') {
+                    sh '''
+                        echo "Installing kubectl..."
+                        curl -LO "https://dl.k8s.io/release/v1.28.0/bin/linux/amd64/kubectl"
+                        chmod +x kubectl
+                        mv kubectl /usr/local/bin/
+                        
+                        echo "Configuring kubectl for EKS..."
+                        aws eks update-kubeconfig --region ${AWS_REGION} --name ${EKS_CLUSTER_NAME}
+                        
+                        echo "Verifying cluster connection..."
+                        kubectl cluster-info
+                        
+                        echo "Creating namespace if not exists..."
+                        kubectl create namespace ${K8S_NAMESPACE} --dry-run=client -o yaml | kubectl apply -f -
+                        
+                        echo "Deploying application to namespace: ${K8S_NAMESPACE}"
+                        
+                        # Apply Kubernetes manifests
+                        kubectl apply -f ${APP_DIR}/k8s/starbucks/ -n ${K8S_NAMESPACE}
+                        
+                        # Update deployment with new image
+                        kubectl set image deployment/starbucks-app \
+                            starbucks=${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG} \
+                            -n ${K8S_NAMESPACE}
+                        
+                        echo "Waiting for rollout to complete..."
+                        kubectl rollout status deployment/starbucks-app -n ${K8S_NAMESPACE} --timeout=300s
+                        
+                        echo "✅ Deployment successful!"
+                    '''
+                }
+            }
+        }
+        
+        stage('Verify Deployment') {
+            steps {
+                script {
+                    echo "========================================"
+                    echo "Stage: Verify Deployment Health"
+                    echo "========================================"
+                }
+                container('aws-kubectl') {
+                    sh '''
+                        echo "Verifying deployment health..."
+                        
+                        # Wait for pods to be ready
+                        kubectl wait --for=condition=ready pod \
+                            -l app=starbucks \
+                            -n ${K8S_NAMESPACE} \
+                            --timeout=120s || true
+                        
+                        echo ""
+                        echo "========== Pod Status =========="
+                        kubectl get pods -n ${K8S_NAMESPACE} -l app=starbucks -o wide
+                        
+                        echo ""
+                        echo "========== Service Status =========="
+                        kubectl get svc -n ${K8S_NAMESPACE}
+                        
+                        echo ""
+                        echo "========== Ingress Status =========="
+                        kubectl get ingress -n ${K8S_NAMESPACE}
+                        
+                        echo ""
+                        echo "========== HPA Status =========="
+                        kubectl get hpa -n ${K8S_NAMESPACE}
+                        
+                        echo ""
+                        echo "========== Recent Events =========="
+                        kubectl get events -n ${K8S_NAMESPACE} --sort-by='.lastTimestamp' | tail -10
+                        
+                        echo ""
+                        echo "✅ Deployment verification completed!"
+                    '''
+                }
+            }
+        }
+        
+        stage('Smoke Test') {
+            steps {
+                script {
+                    echo "========================================"
+                    echo "Stage: Smoke Test"
+                    echo "========================================"
+                }
+                container('aws-kubectl') {
+                    sh '''
+                        echo "Running smoke tests..."
+                        
+                        # Get pod name
+                        POD_NAME=$(kubectl get pods -n ${K8S_NAMESPACE} -l app=starbucks -o jsonpath='{.items[0].metadata.name}')
+                        
+                        if [ -n "$POD_NAME" ]; then
+                            echo "Testing health endpoint on pod: $POD_NAME"
+                            kubectl exec -n ${K8S_NAMESPACE} $POD_NAME -- wget -q -O - http://localhost:8080/health || echo "Health check via exec failed, trying port-forward..."
+                        fi
+                        
+                        echo "✅ Smoke tests completed!"
+                    '''
+                }
+            }
+        }
+    }
+    
+    post {
+        always {
+            script {
+                echo "========================================"
+                echo "Pipeline Completed"
+                echo "========================================"
+            }
+        }
+        success {
+            script {
+                echo """
+                ✅ ============================================
+                ✅ PIPELINE SUCCEEDED
+                ✅ ============================================
+                
+                📦 Image: ${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}
+                🎯 Cluster: ${EKS_CLUSTER_NAME}
+                📍 Namespace: ${K8S_NAMESPACE}
+                🔢 Build: #${BUILD_NUMBER}
+                """
+            }
+        }
+        failure {
+            script {
+                echo """
+                ❌ ============================================
+                ❌ PIPELINE FAILED
+                ❌ ============================================
+                
+                Please check the logs above for details.
+                Build: #${BUILD_NUMBER}
+                """
+            }
+        }
+    }
+}

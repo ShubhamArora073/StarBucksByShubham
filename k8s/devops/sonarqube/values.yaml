@@ -1,0 +1,125 @@
+################################################################################
+# SonarQube Helm Chart Values
+# Production-ready SonarQube deployment on Kubernetes
+################################################################################
+
+# Number of replicas
+replicaCount: 1
+
+# SonarQube Edition (community is free)
+edition: "community"
+
+image:
+  repository: sonarqube
+  tag: "10.6-community"
+  pullPolicy: IfNotPresent
+
+# Service configuration
+service:
+  type: ClusterIP
+  externalPort: 9000
+  internalPort: 9000
+  annotations: {}
+
+# Ingress configuration
+ingress:
+  enabled: true
+  ingressClassName: alb
+  annotations:
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
+    alb.ingress.kubernetes.io/healthcheck-path: /api/system/status
+    alb.ingress.kubernetes.io/success-codes: '200'
+  hosts:
+    - name: ""  # Set via --set if using custom domain
+      path: /
+
+# Resource limits
+resources:
+  requests:
+    cpu: "400m"
+    memory: "2Gi"
+  limits:
+    cpu: "2000m"
+    memory: "4Gi"
+
+# JVM options
+jvmOpts: "-Xmx2g -Xms1g -XX:+UseG1GC"
+
+# Persistence
+persistence:
+  enabled: true
+  storageClass: "gp3"
+  size: "20Gi"
+  accessMode: ReadWriteOnce
+
+# PostgreSQL configuration (using bundled PostgreSQL)
+postgresql:
+  enabled: true
+  postgresqlUsername: "sonarqube"
+  postgresqlPassword: "sonarqube123"  # Change in production!
+  postgresqlDatabase: "sonarqube"
+  
+  persistence:
+    enabled: true
+    storageClass: "gp3"
+    size: "10Gi"
+  
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+  
+  # Node selector
+  primary:
+    nodeSelector:
+      workload: devops
+
+# Node selector
+nodeSelector:
+  workload: devops
+
+# Tolerations
+tolerations: []
+
+# Pod annotations for Prometheus
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "9000"
+  prometheus.io/path: "/api/monitoring/metrics"
+
+# Plugins to install
+plugins:
+  install: []
+  # Add plugins as needed, e.g.:
+  # - "https://github.com/dependency-check/dependency-check-sonar-plugin/releases/download/5.0.0/sonar-dependency-check-plugin-5.0.0.jar"
+
+# Account configuration
+account:
+  adminPassword: "admin123"  # Change in production!
+  currentAdminPassword: "admin"
+
+# SonarQube properties
+sonarProperties:
+  sonar.forceAuthentication: true
+
+# Init containers for sysctl settings (required for Elasticsearch)
+initSysctl:
+  enabled: true
+  vmMaxMapCount: 524288
+  fsFileMax: 131072
+  nofile: 131072
+  nproc: 8192
+
+# Prometheus exporter
+prometheusExporter:
+  enabled: true
+
+# Monitoring
+monitoringPasscode: "define_it"
+

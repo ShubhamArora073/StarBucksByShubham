@@ -1,0 +1,45 @@
+################################################################################
+# DevOps Namespace
+# Contains: Jenkins, SonarQube, Trivy
+################################################################################
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: devops
+  labels:
+    name: devops
+    environment: shared
+    purpose: ci-cd
+---
+# Resource Quota for DevOps namespace
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: devops-quota
+  namespace: devops
+spec:
+  hard:
+    requests.cpu: "8"
+    requests.memory: "16Gi"
+    limits.cpu: "16"
+    limits.memory: "32Gi"
+    persistentvolumeclaims: "10"
+    pods: "50"
+    services: "20"
+---
+# LimitRange for default resource limits
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: devops-limits
+  namespace: devops
+spec:
+  limits:
+    - default:
+        cpu: "500m"
+        memory: "512Mi"
+      defaultRequest:
+        cpu: "100m"
+        memory: "128Mi"
+      type: Container
+

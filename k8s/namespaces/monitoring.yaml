@@ -1,0 +1,45 @@
+################################################################################
+# Monitoring Namespace
+# Contains: Prometheus, Grafana, AlertManager, Loki
+################################################################################
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+  labels:
+    name: monitoring
+    environment: shared
+    purpose: observability
+---
+# Resource Quota for Monitoring namespace
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: monitoring-quota
+  namespace: monitoring
+spec:
+  hard:
+    requests.cpu: "6"
+    requests.memory: "12Gi"
+    limits.cpu: "12"
+    limits.memory: "24Gi"
+    persistentvolumeclaims: "10"
+    pods: "50"
+    services: "20"
+---
+# LimitRange for default resource limits
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: monitoring-limits
+  namespace: monitoring
+spec:
+  limits:
+    - default:
+        cpu: "500m"
+        memory: "512Mi"
+      defaultRequest:
+        cpu: "100m"
+        memory: "128Mi"
+      type: Container
+

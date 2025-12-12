@@ -1,0 +1,27 @@
+# =============================================================================
+# ConfigMap for Starbucks Application
+# Environment configuration and feature flags
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: starbucks-config
+  namespace: starbucks
+  labels:
+    app: starbucks
+data:
+  # Application configuration
+  NODE_ENV: "production"
+  
+  # Feature flags
+  ENABLE_ANALYTICS: "true"
+  ENABLE_CACHE: "true"
+  
+  # Logging configuration
+  LOG_LEVEL: "info"
+  LOG_FORMAT: "json"
+  
+  # Health check configuration
+  HEALTH_CHECK_PATH: "/health"
+  METRICS_PATH: "/metrics"
+

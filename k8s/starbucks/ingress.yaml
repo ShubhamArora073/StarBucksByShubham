@@ -1,0 +1,63 @@
+# =============================================================================
+# ALB Ingress for Starbucks Application
+# Internet-facing Application Load Balancer
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: starbucks-ingress
+  namespace: starbucks
+  labels:
+    app: starbucks
+  annotations:
+    # ALB Ingress Controller annotations
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    
+    # Load Balancer naming
+    alb.ingress.kubernetes.io/load-balancer-name: starbucks-app-alb
+    alb.ingress.kubernetes.io/group.name: starbucks-app
+    
+    # Listener configuration
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
+    
+    # Health check configuration
+    alb.ingress.kubernetes.io/healthcheck-protocol: HTTP
+    alb.ingress.kubernetes.io/healthcheck-port: traffic-port
+    alb.ingress.kubernetes.io/healthcheck-path: /health
+    alb.ingress.kubernetes.io/healthcheck-interval-seconds: "15"
+    alb.ingress.kubernetes.io/healthcheck-timeout-seconds: "5"
+    alb.ingress.kubernetes.io/healthy-threshold-count: "2"
+    alb.ingress.kubernetes.io/unhealthy-threshold-count: "2"
+    
+    # Target group attributes
+    alb.ingress.kubernetes.io/target-group-attributes: |
+      deregistration_delay.timeout_seconds=30,
+      stickiness.enabled=false
+    
+    # Security Groups - allow HTTP from anywhere
+    alb.ingress.kubernetes.io/security-groups: ""
+    alb.ingress.kubernetes.io/manage-backend-security-group-rules: "true"
+    
+    # Tags for AWS resources
+    alb.ingress.kubernetes.io/tags: |
+      Environment=production,
+      Application=starbucks,
+      ManagedBy=kubernetes
+    
+    # Success codes
+    alb.ingress.kubernetes.io/success-codes: "200,301,302"
+spec:
+  ingressClassName: alb
+  rules:
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: starbucks-service
+                port:
+                  number: 80
+

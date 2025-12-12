@@ -1,0 +1,35 @@
+################################################################################
+# Jenkins Ingress Configuration
+# ALB Ingress for Jenkins access on port 8080
+################################################################################
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: jenkins-ingress
+  namespace: devops
+  annotations:
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    # Listen on port 8080 for Jenkins
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 8080}]'
+    alb.ingress.kubernetes.io/healthcheck-path: /login
+    alb.ingress.kubernetes.io/healthcheck-port: "8080"
+    alb.ingress.kubernetes.io/success-codes: '200,403'
+    # Use same ALB group for cost optimization
+    alb.ingress.kubernetes.io/group.name: starbucks-devops
+    alb.ingress.kubernetes.io/group.order: '10'
+    # Common tags for the shared ALB
+    alb.ingress.kubernetes.io/tags: Environment=dev,Purpose=devops
+spec:
+  ingressClassName: alb
+  rules:
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: jenkins
+                port:
+                  number: 8080

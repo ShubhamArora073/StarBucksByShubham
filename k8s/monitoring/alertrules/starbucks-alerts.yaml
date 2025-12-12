@@ -1,0 +1,162 @@
+################################################################################
+# Starbucks Application Alert Rules
+# Custom alerts for the Starbucks application and infrastructure
+################################################################################
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: starbucks-alerts
+  namespace: monitoring
+  labels:
+    release: prometheus
+    app: kube-prometheus-stack
+spec:
+  groups:
+    ############################################################################
+    # Application Alerts
+    ############################################################################
+    - name: starbucks-app
+      rules:
+        # Pod not ready
+        - alert: StarbucksPodNotReady
+          expr: |
+            kube_pod_status_ready{namespace="starbucks", condition="true"} == 0
+          for: 5m
+          labels:
+            severity: warning
+            app: starbucks
+          annotations:
+            summary: "Starbucks pod not ready"
+            description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} has been not ready for more than 5 minutes."
+
+        # High pod restart count
+        - alert: StarbucksPodRestartingTooMuch
+          expr: |
+            increase(kube_pod_container_status_restarts_total{namespace="starbucks"}[1h]) > 5
+          for: 5m
+          labels:
+            severity: warning
+            app: starbucks
+          annotations:
+            summary: "Starbucks pod restarting frequently"
+            description: "Pod {{ $labels.pod }} has restarted {{ $value }} times in the last hour."
+
+        # No pods running
+        - alert: StarbucksNoPods
+          expr: |
+            absent(kube_pod_info{namespace="starbucks"})
+          for: 5m
+          labels:
+            severity: critical
+            app: starbucks
+          annotations:
+            summary: "No Starbucks pods running"
+            description: "No pods are running in the starbucks namespace."
+
+    ############################################################################
+    # DevOps Alerts
+    ############################################################################
+    - name: devops-alerts
+      rules:
+        # Jenkins down
+        - alert: JenkinsDown
+          expr: |
+            up{job="jenkins"} == 0 or absent(up{job="jenkins"})
+          for: 5m
+          labels:
+            severity: critical
+            app: jenkins
+          annotations:
+            summary: "Jenkins is down"
+            description: "Jenkins has been unavailable for more than 5 minutes."
+
+        # SonarQube down
+        - alert: SonarQubeDown
+          expr: |
+            kube_pod_status_ready{namespace="devops", pod=~"sonarqube.*", condition="true"} == 0
+          for: 5m
+          labels:
+            severity: critical
+            app: sonarqube
+          annotations:
+            summary: "SonarQube is down"
+            description: "SonarQube has been unavailable for more than 5 minutes."
+
+    ############################################################################
+    # Resource Alerts
+    ############################################################################
+    - name: resource-alerts
+      rules:
+        # High CPU usage
+        - alert: HighCPUUsage
+          expr: |
+            (sum(rate(container_cpu_usage_seconds_total{namespace=~"starbucks|devops|monitoring"}[5m])) by (pod, namespace) / 
+            sum(kube_pod_container_resource_limits{resource="cpu", namespace=~"starbucks|devops|monitoring"}) by (pod, namespace)) > 0.9
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High CPU usage detected"
+            description: "Pod {{ $labels.pod }} in {{ $labels.namespace }} is using more than 90% of CPU limit."
+
+        # High memory usage
+        - alert: HighMemoryUsage
+          expr: |
+            (sum(container_memory_working_set_bytes{namespace=~"starbucks|devops|monitoring"}) by (pod, namespace) / 
+            sum(kube_pod_container_resource_limits{resource="memory", namespace=~"starbucks|devops|monitoring"}) by (pod, namespace)) > 0.9
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High memory usage detected"
+            description: "Pod {{ $labels.pod }} in {{ $labels.namespace }} is using more than 90% of memory limit."
+
+        # PVC almost full
+        - alert: PersistentVolumeAlmostFull
+          expr: |
+            (kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes) > 0.85
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "PVC almost full"
+            description: "PVC {{ $labels.persistentvolumeclaim }} is {{ $value | humanizePercentage }} full."
+
+    ############################################################################
+    # Node Alerts
+    ############################################################################
+    - name: node-alerts
+      rules:
+        # Node not ready
+        - alert: NodeNotReady
+          expr: |
+            kube_node_status_condition{condition="Ready", status="true"} == 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Node not ready"
+            description: "Node {{ $labels.node }} has been not ready for more than 5 minutes."
+
+        # Node high CPU
+        - alert: NodeHighCPU
+          expr: |
+            (1 - avg(rate(node_cpu_seconds_total{mode="idle"}[5m])) by (instance)) > 0.85
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Node high CPU usage"
+            description: "Node {{ $labels.instance }} CPU usage is above 85%."
+
+        # Node high memory
+        - alert: NodeHighMemory
+          expr: |
+            (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) > 0.85
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Node high memory usage"
+            description: "Node {{ $labels.instance }} memory usage is above 85%."
+

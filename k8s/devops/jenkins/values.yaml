@@ -1,0 +1,142 @@
+################################################################################
+# Jenkins Helm Chart Values
+# Production-ready Jenkins deployment on Kubernetes
+################################################################################
+
+controller:
+  # Jenkins image configuration (new format)
+  image:
+    registry: "docker.io"
+    repository: "jenkins/jenkins"
+    tag: "lts-jdk21"
+    pullPolicy: "IfNotPresent"
+
+  # Resource configuration
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "1Gi"
+    limits:
+      cpu: "2000m"
+      memory: "4Gi"
+
+  # Java options for Jenkins
+  javaOpts: "-Xms1g -Xmx2g -XX:+UseG1GC -XX:+UseStringDeduplication"
+
+  # Jenkins URL (update with your domain)
+  jenkinsUrl: "http://jenkins.devops.svc.cluster.local:8080"
+
+  # Admin user configuration
+  admin:
+    existingSecret: "jenkins-admin-secret"
+    userKey: "jenkins-admin-user"
+    passwordKey: "jenkins-admin-password"
+
+  # Install plugins (using latest compatible versions)
+  installPlugins:
+    - kubernetes:latest
+    - workflow-aggregator:latest
+    - git:latest
+    - github:latest
+    - github-branch-source:latest
+    - docker-workflow:latest
+    - docker-commons:latest
+    - configuration-as-code:latest
+    - job-dsl:latest
+    - blueocean:latest
+    - sonar:latest
+    - pipeline-stage-view:latest
+    - credentials-binding:latest
+    - timestamper:latest
+    - ws-cleanup:latest
+    - antisamy-markup-formatter:latest
+    - build-timeout:latest
+    - email-ext:latest
+    - mailer:latest
+    - matrix-auth:latest
+
+  # Additional plugins for our pipeline
+  additionalPlugins:
+    - nodejs:latest
+    - pipeline-utility-steps:latest
+    - amazon-ecr:latest
+
+  # Ingress configuration (disabled - we'll use separate ingress)
+  ingress:
+    enabled: false
+
+  # Prometheus metrics (ServiceMonitor disabled until monitoring stack is deployed)
+  prometheus:
+    enabled: false
+    serviceMonitorEnabled: false
+
+  # Security context
+  podSecurityContextOverride:
+    runAsUser: 1000
+    runAsNonRoot: true
+    fsGroup: 1000
+
+  # Node selector for devops nodes
+  nodeSelector:
+    workload: devops
+
+  # Tolerations (if needed)
+  tolerations: []
+
+  # Pod annotations
+  podAnnotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8080"
+    prometheus.io/path: "/prometheus"
+
+  # Service type
+  serviceType: ClusterIP
+
+################################################################################
+# Jenkins Agent Configuration
+################################################################################
+
+agent:
+  enabled: true
+  namespace: devops
+  
+  # Pod retention
+  podRetention: "Never"
+  
+  # Show raw yaml
+  showRawYaml: true
+
+  # Default container configuration
+  resources:
+    requests:
+      cpu: "200m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+################################################################################
+# Persistence Configuration
+################################################################################
+
+persistence:
+  enabled: true
+  storageClass: "gp3"
+  size: "50Gi"
+  accessMode: "ReadWriteOnce"
+
+################################################################################
+# Service Account Configuration
+################################################################################
+
+serviceAccount:
+  create: false
+  name: "jenkins"
+
+################################################################################
+# RBAC Configuration
+################################################################################
+
+rbac:
+  create: true
+  readSecrets: true

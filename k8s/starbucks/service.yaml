@@ -1,0 +1,27 @@
+# =============================================================================
+# Starbucks Application Service
+# ClusterIP Service - ALB Ingress handles external traffic
+# =============================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: starbucks-service
+  namespace: starbucks
+  labels:
+    app: starbucks
+    tier: frontend
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8080"
+spec:
+  type: ClusterIP
+  selector:
+    app: starbucks
+    version: v1
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+      protocol: TCP
+  sessionAffinity: None
+
