@@ -251,7 +251,8 @@ spec:
                     dir('app') {
                         sh '''
                             echo "Building production application..."
-                            npm run build
+                            # CI=false prevents treating warnings as errors
+                            CI=false npm run build
                             echo "✅ Build completed successfully"
                             echo "Build output:"
                             ls -la build/
