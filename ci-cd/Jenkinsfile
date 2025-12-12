@@ -24,11 +24,11 @@ spec:
       tty: true
       resources:
         requests:
-          cpu: "500m"
-          memory: "1Gi"
+          cpu: "100m"
+          memory: "256Mi"
         limits:
-          cpu: "1000m"
-          memory: "2Gi"
+          cpu: "500m"
+          memory: "512Mi"
     - name: docker
       image: docker:24-dind
       securityContext:
@@ -38,11 +38,11 @@ spec:
           value: ""
       resources:
         requests:
+          cpu: "100m"
+          memory: "256Mi"
+        limits:
           cpu: "500m"
           memory: "512Mi"
-        limits:
-          cpu: "1000m"
-          memory: "1Gi"
     - name: aws-kubectl
       image: amazon/aws-cli:latest
       command:
@@ -50,11 +50,11 @@ spec:
       tty: true
       resources:
         requests:
+          cpu: "50m"
+          memory: "128Mi"
+        limits:
           cpu: "200m"
           memory: "256Mi"
-        limits:
-          cpu: "500m"
-          memory: "512Mi"
     - name: trivy
       image: aquasec/trivy:latest
       command:
@@ -62,11 +62,11 @@ spec:
       tty: true
       resources:
         requests:
+          cpu: "50m"
+          memory: "128Mi"
+        limits:
           cpu: "200m"
           memory: "256Mi"
-        limits:
-          cpu: "500m"
-          memory: "512Mi"
     - name: sonar-scanner
       image: sonarsource/sonar-scanner-cli:latest
       command:
@@ -74,11 +74,11 @@ spec:
       tty: true
       resources:
         requests:
+          cpu: "50m"
+          memory: "128Mi"
+        limits:
           cpu: "200m"
           memory: "256Mi"
-        limits:
-          cpu: "500m"
-          memory: "512Mi"
 '''
         }
     }
