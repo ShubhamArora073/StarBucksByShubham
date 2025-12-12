@@ -1,6 +1,7 @@
 // =============================================================================
 // Starbucks Application CI/CD Pipeline
 // Jenkins Pipeline for building and deploying to EKS
+// Repository: https://github.com/ShubhamArora073/StarBucksByShubham
 // Author: Shubham Arora
 // =============================================================================
 
@@ -83,6 +84,10 @@ spec:
     }
     
     environment {
+        // Git Configuration
+        GIT_REPO_URL = 'https://github.com/ShubhamArora073/StarBucksByShubham.git'
+        GIT_BRANCH = 'main'
+        
         // AWS Configuration
         AWS_REGION = 'ap-south-1'
         AWS_ACCOUNT_ID = '245279657609'
@@ -100,9 +105,6 @@ spec:
         // Build Configuration
         IMAGE_TAG = "${BUILD_NUMBER}"
         DOCKER_BUILDKIT = '1'
-        
-        // App Directory
-        APP_DIR = 'StarBucksByShubham'
     }
     
     options {
@@ -120,12 +122,16 @@ spec:
                     echo "Stage: Checkout Source Code"
                     echo "========================================"
                 }
-                checkout scm
+                // Checkout from the new StarBucksByShubham repository
+                git branch: "${GIT_BRANCH}",
+                    credentialsId: 'github-token',
+                    url: "${GIT_REPO_URL}"
                 script {
                     env.GIT_COMMIT_SHORT = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
                     env.IMAGE_TAG = "${BUILD_NUMBER}-${GIT_COMMIT_SHORT}"
                     echo "Build TAG: ${IMAGE_TAG}"
                     echo "Workspace: ${WORKSPACE}"
+                    sh 'ls -la'
                 }
             }
         }
@@ -138,7 +144,7 @@ spec:
                     echo "========================================"
                 }
                 container('node') {
-                    dir("${APP_DIR}/app") {
+                    dir('app') {
                         sh '''
                             echo "Node version: $(node --version)"
                             echo "NPM version: $(npm --version)"
@@ -156,7 +162,7 @@ spec:
                 stage('Lint Check') {
                     steps {
                         container('node') {
-                            dir("${APP_DIR}/app") {
+                            dir('app') {
                                 sh '''
                                     echo "Running lint check..."
                                     npm run lint 2>/dev/null || echo "⚠️ No lint script configured, skipping..."
@@ -168,7 +174,7 @@ spec:
                 stage('Unit Tests') {
                     steps {
                         container('node') {
-                            dir("${APP_DIR}/app") {
+                            dir('app') {
                                 sh '''
                                     echo "Running unit tests..."
                                     CI=true npm test -- --coverage --watchAll=false --passWithNoTests || true
@@ -189,7 +195,7 @@ spec:
                     echo "========================================"
                 }
                 container('sonar-scanner') {
-                    dir("${APP_DIR}/app") {
+                    dir('app') {
                         withCredentials([string(credentialsId: 'sonarqube-token', variable: 'SONAR_TOKEN')]) {
                             sh '''
                                 echo "Running SonarQube analysis..."
@@ -216,7 +222,7 @@ spec:
                     echo "========================================"
                 }
                 container('trivy') {
-                    dir("${APP_DIR}/app") {
+                    dir('app') {
                         sh '''
                             echo "Scanning source code for vulnerabilities..."
                             trivy fs --severity HIGH,CRITICAL \
@@ -239,7 +245,7 @@ spec:
                     echo "========================================"
                 }
                 container('node') {
-                    dir("${APP_DIR}/app") {
+                    dir('app') {
                         sh '''
                             echo "Building production application..."
                             npm run build
@@ -261,21 +267,21 @@ spec:
                     echo "========================================"
                 }
                 container('docker') {
-                    dir("${APP_DIR}") {
-                        sh '''
-                            echo "Building Docker image for linux/amd64..."
-                            
-                            docker build \
-                                --platform linux/amd64 \
-                                -f docker/Dockerfile \
-                                -t ${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG} \
-                                -t ${ECR_REGISTRY}/${ECR_REPOSITORY}:latest \
-                                .
-                            
-                            echo "✅ Docker image built successfully"
-                            docker images | grep ${ECR_REPOSITORY}
-                        '''
-                    }
+                    sh '''
+                        echo "Building Docker image for linux/amd64..."
+                        echo "Current directory: $(pwd)"
+                        ls -la
+                        
+                        docker build \
+                            --platform linux/amd64 \
+                            -f docker/Dockerfile \
+                            -t ${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG} \
+                            -t ${ECR_REGISTRY}/${ECR_REPOSITORY}:latest \
+                            .
+                        
+                        echo "✅ Docker image built successfully"
+                        docker images | grep ${ECR_REPOSITORY}
+                    '''
                 }
             }
         }
@@ -359,7 +365,7 @@ spec:
                         echo "Deploying application to namespace: ${K8S_NAMESPACE}"
                         
                         # Apply Kubernetes manifests
-                        kubectl apply -f ${APP_DIR}/k8s/starbucks/ -n ${K8S_NAMESPACE}
+                        kubectl apply -f k8s/starbucks/ -n ${K8S_NAMESPACE}
                         
                         # Update deployment with new image
                         kubectl set image deployment/starbucks-app \
