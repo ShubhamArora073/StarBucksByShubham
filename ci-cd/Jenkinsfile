@@ -320,7 +320,8 @@ spec:
                 container('aws-kubectl') {
                     sh '''
                         echo "Getting ECR login token..."
-                        aws ecr get-login-password --region ${AWS_REGION} > /tmp/ecr-password.txt
+                        # Write to shared workspace directory instead of /tmp
+                        aws ecr get-login-password --region ${AWS_REGION} > ${WORKSPACE}/ecr-password.txt
                         
                         # Ensure ECR repository exists
                         aws ecr describe-repositories --repository-names ${ECR_REPOSITORY} --region ${AWS_REGION} || \
@@ -330,7 +331,10 @@ spec:
                 container('docker') {
                     sh '''
                         echo "Logging into ECR..."
-                        cat /tmp/ecr-password.txt | docker login --username AWS --password-stdin ${ECR_REGISTRY}
+                        cat ${WORKSPACE}/ecr-password.txt | docker login --username AWS --password-stdin ${ECR_REGISTRY}
+                        
+                        # Clean up password file
+                        rm -f ${WORKSPACE}/ecr-password.txt
                         
                         echo "Pushing image to ECR..."
                         docker push ${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}
