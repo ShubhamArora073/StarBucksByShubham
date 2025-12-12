@@ -297,12 +297,17 @@ spec:
                     echo "Stage: Trivy Docker Image Scan"
                     echo "========================================"
                 }
-                container('trivy') {
+                container('docker') {
                     sh '''
+                        echo "Installing Trivy in Docker container..."
+                        apk add --no-cache curl
+                        curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+                        
                         echo "Scanning Docker image for vulnerabilities..."
                         trivy image --severity HIGH,CRITICAL \
                             --format table \
                             --exit-code 0 \
+                            --timeout 10m \
                             ${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG} || true
                         echo "✅ Docker image security scan completed"
                     '''
